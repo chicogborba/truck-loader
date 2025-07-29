@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 type Voxel = { 
   id: string; 
-  pos: [number, number, number]; 
+  pos: [number, number, number]; // Coordenadas de grid simples [x, y, z]
   color: number;
 };
 
@@ -13,6 +13,33 @@ interface VoxelPainterProps {
   gridHeight: number;
   maxHeight?: number;
   cellSize?: number;
+}
+
+// Função para criar uma caixa de voxels
+function createBox(
+  id: string,
+  startPos: [number, number, number], // posição inicial [x, y, z]
+  dimensions: [number, number, number], // dimensões [largura, altura, profundidade]
+  color: number = 0x3498db
+): Voxel[] {
+  const [startX, startY, startZ] = startPos;
+  const [width, height, depth] = dimensions;
+  const voxels: Voxel[] = [];
+
+  // Gera todos os voxels da caixa
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      for (let z = 0; z < depth; z++) {
+        voxels.push({
+          id: `${id}_${x}_${y}_${z}`,
+          pos: [startX + x, startY + y, startZ + z],
+          color: color
+        });
+      }
+    }
+  }
+
+  return voxels;
 }
 
 export default function VoxelPainter({
@@ -24,35 +51,26 @@ export default function VoxelPainter({
   const { scene } = useThree();
   const cubeGeo = useRef(new THREE.BoxGeometry(cellSize, cellSize, cellSize));
 
-  // Voxels hardcoded com diferentes cores - posições ajustadas para a grid
+  // Função para converter coordenadas de grid para posição 3D
+  const gridToWorldPosition = (gridX: number, gridY: number, gridZ: number): [number, number, number] => {
+    const halfW = gridWidth / 2;
+    const halfH = gridHeight / 2;
+    
+    // Converte coordenadas de grid para posição world
+    const worldX = (gridX * cellSize) - halfW + (cellSize / 2);
+    const worldY = gridY * cellSize + (cellSize / 2);
+    const worldZ = (gridZ * cellSize) - halfH + (cellSize / 2);
+    
+    return [worldX, worldY, worldZ];
+  };
+
+
   const voxels: Voxel[] = [
-    // Base layer (primeira camada no chão)
-    { id: "0-25-0", pos: [0 + cellSize/2, cellSize/2, 0 + cellSize/2], color: 0x3498db }, // azul - centro
-    { id: "50-25-0", pos: [cellSize + cellSize/2, cellSize/2, 0 + cellSize/2], color: 0xe74c3c }, // vermelho - direita
-    { id: "-50-25-0", pos: [-cellSize + cellSize/2, cellSize/2, 0 + cellSize/2], color: 0x2ecc71 }, // verde - esquerda
-    { id: "0-25-50", pos: [0 + cellSize/2, cellSize/2, cellSize + cellSize/2], color: 0xf39c12 }, // laranja - frente
-    { id: "0-25-100", pos: [0 + cellSize/2, cellSize/2, 2*cellSize + cellSize/2], color: 0x9b59b6 }, // roxo - mais frente
-    
-    // Second layer (segunda camada)
-    { id: "0-75-0", pos: [0 + cellSize/2, 1.5*cellSize, 0 + cellSize/2], color: 0x1abc9c }, // turquesa
-    { id: "50-75-50", pos: [cellSize + cellSize/2, 1.5*cellSize, cellSize + cellSize/2], color: 0xe67e22 }, // laranja escuro
-    { id: "-50-75-50", pos: [-cellSize + cellSize/2, 1.5*cellSize, cellSize + cellSize/2], color: 0x34495e }, // cinza escuro
-    
-    // Third layer (terceira camada)
-    { id: "0-125-0", pos: [0 + cellSize/2, 2.5*cellSize, 0 + cellSize/2], color: 0xf1c40f }, // amarelo
-    { id: "0-125-50", pos: [0 + cellSize/2, 2.5*cellSize, cellSize + cellSize/2], color: 0x8e44ad }, // roxo escuro
-    
-    // Tower structure (torre)
-    { id: "100-25-0", pos: [2*cellSize + cellSize/2, cellSize/2, 0 + cellSize/2], color: 0x95a5a6 }, // cinza claro
-    { id: "100-75-0", pos: [2*cellSize + cellSize/2, 1.5*cellSize, 0 + cellSize/2], color: 0x95a5a6 },
-    { id: "100-125-0", pos: [2*cellSize + cellSize/2, 2.5*cellSize, 0 + cellSize/2], color: 0x95a5a6 },
-    { id: "100-175-0", pos: [2*cellSize + cellSize/2, 3.5*cellSize, 0 + cellSize/2], color: 0xc0392b }, // vermelho escuro (topo da torre)
-    
-    // Parede lateral (próximo à parede esquerda)
-    { id: "-100-25-25", pos: [-2*cellSize + cellSize/2, cellSize/2, cellSize/2 + cellSize/2], color: 0x27ae60 },
-    { id: "-100-75-25", pos: [-2*cellSize + cellSize/2, 1.5*cellSize, cellSize/2 + cellSize/2], color: 0x27ae60 },
-    { id: "-100-25-75", pos: [-2*cellSize + cellSize/2, cellSize/2, 1.5*cellSize + cellSize/2], color: 0x27ae60 },
-    { id: "-100-75-75", pos: [-2*cellSize + cellSize/2, 1.5*cellSize, 1.5*cellSize + cellSize/2], color: 0x27ae60 },
+
+    ...createBox("box1", [12, 0, 22], [3, 6, 3], 0x3498db),
+
+    ...createBox("box1", [4, 0, 19], [6, 7, 6], 0xdb3444),
+
   ];
 
   useEffect(() => {
@@ -106,13 +124,17 @@ export default function VoxelPainter({
     const wallGrid = new THREE.LineSegments(wallGeo, gridMat);
     scene.add(wallGrid);
 
-    // Create voxel meshes
+    // Create voxel meshes - usando a função de normalização
     const voxelMeshes: THREE.Mesh[] = [];
     
     voxels.forEach((voxel) => {
       const material = new THREE.MeshStandardMaterial({ color: voxel.color });
       const mesh = new THREE.Mesh(cubeGeo.current, material);
-      mesh.position.set(...voxel.pos);
+      
+      // Converte grid coords para world coords
+      const worldPos = gridToWorldPosition(voxel.pos[0], voxel.pos[1], voxel.pos[2]);
+      mesh.position.set(...worldPos);
+      
       mesh.userData = { voxel: true, id: voxel.id };
       scene.add(mesh);
       voxelMeshes.push(mesh);
